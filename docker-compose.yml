@@ -7,7 +7,7 @@ services:
     ports: ["8000:8000"]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import json, urllib.request; health = json.load(urllib.request.urlopen('http://localhost:8000/health')); raise SystemExit(0 if health.get('model_loaded') else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -20,7 +20,9 @@ services:
     depends_on: {api: {condition: service_healthy}}
   grafana:
     image: grafana/grafana:11.4.0
-    environment: {GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}, GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me-before-deploy}}
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-change-me-before-deploy}"
     volumes: ["grafana-data:/var/lib/grafana", "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro", "./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro"]
     ports: ["127.0.0.1:3000:3000"]
     restart: unless-stopped
