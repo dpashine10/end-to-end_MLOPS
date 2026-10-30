@@ -24,6 +24,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Copy application files only after dependencies are installed.
 COPY src ./src
+COPY frontend ./frontend
 COPY artifacts ./artifacts
 COPY reports ./reports
 

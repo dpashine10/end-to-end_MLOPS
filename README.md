@@ -47,15 +47,15 @@ uv run ruff check .
 
 `uv run download-data` fetches the dataset only when a valid local copy is absent. Use `--force` to refresh it. The training command writes `artifacts/sms_spam_pipeline.joblib`, `artifacts/model_metadata.json`, and `reports/latest_evaluation.json`. Candidate models with spam F1 below `SMS_MIN_ACCEPTED_F1` are rejected and do not replace the current model. The default threshold is a project policy, not a universal benchmark.
 
-Run the API from the repository root:
+Run the API and the web page from the repository root:
 
 ```bash
 uv run uvicorn sms_spam_mlops.api.app:app --app-dir src --host 127.0.0.1 --port 8000
 ```
 
-Expected local URLs: API `http://127.0.0.1:8000`, OpenAPI `http://127.0.0.1:8000/docs`, health `http://127.0.0.1:8000/health`, and metrics `http://127.0.0.1:8000/metrics`.
+Open `http://127.0.0.1:8000/` to use the web page. The same server provides the API at `/predict`, `/health`, and `/metrics`, plus OpenAPI at `/docs`. The `/api` route returns a small API status document. A trained model is required for predictions; without it, the page and API health route remain viewable but inference responds that the model is unavailable.
 
-To preview the static frontend, serve `frontend/` with any static file server. Before deployment, edit `frontend/config.js` so `apiBaseUrl` is the actual HTTPS API origin; this is intentionally a deployment setting, not a secret. Do not open the HTML with a `file://` URL when testing API calls because browser CORS rules differ.
+The default `frontend/config.js` uses a same-origin API, which works with the API server above and in the Docker deployment. When hosting the static files separately (for example on Cloudflare Pages), edit `frontend/config.js` so `apiBaseUrl` is the full public API origin such as `https://api.example.com`; this is a public URL, not a secret. Do not open the HTML with a `file://` URL when testing API calls.
 
 ## Metrics and monitoring
 
@@ -65,13 +65,13 @@ From the repository root, after a model has been trained:
 docker compose up --build -d
 ```
 
-Compose starts the API on `http://localhost:8000`, Prometheus on `http://127.0.0.1:9090`, and Grafana on `http://127.0.0.1:3000`. Prometheus and Grafana bind to loopback by default and should be reached through an authenticated reverse proxy or SSH tunnel on a VM. Set `GRAFANA_ADMIN_PASSWORD` in `.env` before deployment; never use the example password publicly. Stop the stack with:
+Compose serves the website and API on `http://127.0.0.1:8000`, Prometheus on `http://127.0.0.1:9090`, and Grafana on `http://127.0.0.1:3000`. All ports bind to loopback by default. On a VM, reach monitoring through an authenticated reverse proxy or SSH tunnel. Set `GRAFANA_ADMIN_PASSWORD` in `.env` before deployment; never use the example password publicly. Stop the stack with:
 
 ```bash
 docker compose down
 ```
 
-The API exposes bounded-label request count, status, latency, prediction class, model loaded status, model version, and latest offline evaluation metrics. The evaluation gauges are read from `reports/latest_evaluation.json`; they are not inferred from unlabeled user messages.
+The API exposes bounded-label request count, status, latency, prediction class, model loaded status, model version, and latest accepted offline evaluation metrics. The evaluation gauges are read from `artifacts/model_metadata.json`; rejected runs cannot overwrite metrics for the current accepted model. They are not inferred from unlabeled user messages.
 
 ## CI and training workflow
 
@@ -89,14 +89,17 @@ cd sms-spam-mlops
 cp .env.example .env
 ```
 
-Edit `.env`: set a strong `GRAFANA_ADMIN_PASSWORD`, set `SMS_CORS_ORIGINS` to the final frontend origin, and run the data and training commands on the VM before building:
+Install `uv` on the VM, then edit `.env`: set a strong `GRAFANA_ADMIN_PASSWORD`, set `SMS_CORS_ORIGINS` to the final frontend origin, and acquire/train the model from the repository root before building:
 
 ```bash
+uv sync --extra dev
+uv run download-data
+uv run train-model
 docker compose up --build -d
 docker compose ps
 ```
 
-The baseline deployment exposes only the API port publicly. Keep Prometheus and Grafana loopback-bound. Put Nginx or a managed load balancer in front of the API for TLS, forward only the API host, and set the frontend API URL to the resulting HTTPS origin. HTTPS, DNS, registry authentication, backups, and firewall rules remain operator tasks; this repository does not claim them as configured.
+Compose binds the API, Prometheus, and Grafana to loopback. Put Nginx or a managed load balancer in front of the API for TLS, forward only the API host, and set the frontend API URL to the resulting HTTPS origin. HTTPS, DNS, registry authentication, backups, and firewall rules remain operator tasks; this repository does not claim them as configured.
 
 ## Cloudflare Pages frontend
 

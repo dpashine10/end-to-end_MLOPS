@@ -1,17 +1,26 @@
 """FastAPI application for SMS spam inference."""
 
-import time
 import json
+import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
-from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Counter, Gauge, Histogram, generate_latest
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel, Field, field_validator
 
 from sms_spam_mlops import __version__
-from sms_spam_mlops.config import Settings, settings
+from sms_spam_mlops.config import FRONTEND_DIR, Settings, settings
 from sms_spam_mlops.models.predict import ModelService
 
 
@@ -29,12 +38,18 @@ class PredictionRequest(BaseModel):
         return value
 
 
-def create_app(runtime_settings: Settings = settings) -> FastAPI:
+def create_app(
+    runtime_settings: Settings = settings, frontend_dir: Path = FRONTEND_DIR
+) -> FastAPI:
     """Create an isolated app and metric registry for production or tests."""
 
     registry = CollectorRegistry(auto_describe=True)
-    requests = Counter("sms_http_requests_total", "HTTP requests", ["endpoint", "status"], registry=registry)
-    prediction_counts = Counter("sms_predictions_total", "Predictions by class", ["predicted_class"], registry=registry)
+    requests = Counter(
+        "sms_http_requests_total", "HTTP requests", ["endpoint", "status"], registry=registry
+    )
+    prediction_counts = Counter(
+        "sms_predictions_total", "Predictions by class", ["predicted_class"], registry=registry
+    )
     prediction_failures = Counter("sms_prediction_failures_total", "Prediction failures", registry=registry)
     latency = Histogram("sms_http_request_duration_seconds", "HTTP request latency", ["endpoint"], registry=registry)
     model_status = Gauge("sms_model_loaded", "Whether the model is loaded", registry=registry)
@@ -43,12 +58,15 @@ def create_app(runtime_settings: Settings = settings) -> FastAPI:
         name: Gauge(f"sms_model_eval_{name}", f"Latest offline evaluation {name}", registry=registry)
         for name in ("accuracy", "precision_spam", "recall_spam", "f1_spam", "macro_f1")
     }
-    evaluation_path = runtime_settings.report_dir / "latest_evaluation.json"
+    # Artifact metadata changes only when a candidate is accepted, keeping a
+    # rejected evaluation from replacing current-model quality metrics.
+    evaluation_path = runtime_settings.artifact_dir / "model_metadata.json"
     if evaluation_path.is_file():
         try:
-            latest_metrics = json.loads(evaluation_path.read_text(encoding="utf-8")).get("metrics", {})
+            report = json.loads(evaluation_path.read_text(encoding="utf-8"))
+            latest_metrics = report.get("metrics", {})
             for name, gauge in evaluation_metrics.items():
-                if name in latest_metrics:
+                if report.get("accepted") is True and name in latest_metrics:
                     gauge.set(float(latest_metrics[name]))
         except (OSError, ValueError, TypeError):
             pass
@@ -76,17 +94,28 @@ def create_app(runtime_settings: Settings = settings) -> FastAPI:
         return response
 
     @app.get("/")
-    def root() -> dict[str, str]:
-        return {"service": "sms-spam-detector", "status": "ok", "docs": "/docs"}
+    def root() -> FileResponse:
+        return FileResponse(frontend_dir / "index.html")
+
+    @app.get("/api")
+    def api_info() -> dict[str, str]:
+        return {"service": "sms-spam-detector", "status": "ok", "docs": "/docs", "health": "/health"}
 
     @app.get("/health")
     def health() -> dict[str, object]:
-        return {"status": "ok" if service.loaded else "degraded", "model_loaded": service.loaded, "model_version": service.model_version}
+        return {
+            "status": "ok" if service.loaded else "degraded",
+            "model_loaded": service.loaded,
+            "model_version": service.model_version,
+        }
 
     @app.post("/predict")
     def predict(payload: PredictionRequest) -> dict[str, object]:
         if len(payload.text) > runtime_settings.max_message_length:
-            raise HTTPException(status_code=413, detail=f"text exceeds {runtime_settings.max_message_length} characters")
+            raise HTTPException(
+                status_code=413,
+                detail=f"text exceeds {runtime_settings.max_message_length} characters",
+            )
         try:
             predicted_class, probability = service.predict(payload.text)
         except RuntimeError as exc:
@@ -107,6 +136,9 @@ def create_app(runtime_settings: Settings = settings) -> FastAPI:
     def metrics() -> PlainTextResponse:
         return PlainTextResponse(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
+    # Keep the static fallback last so API routes take precedence. Root-relative
+    # asset paths also work when frontend/ is deployed as a static Pages site.
+    app.mount("/", StaticFiles(directory=frontend_dir), name="frontend-assets")
     return app
 
 

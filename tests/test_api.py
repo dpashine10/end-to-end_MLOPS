@@ -5,6 +5,10 @@ from sms_spam_mlops.api.app import create_app
 
 def test_health_predict_and_metrics(test_settings) -> None:
     client = TestClient(create_app(test_settings))
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "SMS Spam Detector" in page.text
+    assert client.get("/script.js").status_code == 200
     assert client.get("/health").json()["model_loaded"] is True
     response = client.post("/predict", json={"text": "free prize claim now"})
     assert response.status_code == 200

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SMS Spam Detector</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <main class="shell">
@@ -14,7 +14,7 @@
       <p class="lede">Paste a message and get a transparent spam estimate from a trained TF-IDF and Logistic Regression model.</p>
     </header>
     <section class="panel" aria-labelledby="checker-title">
-      <div class="panel-heading"><div><p class="eyebrow">Live check</p><h2 id="checker-title">Inspect a message</h2></div><span class="status-dot" aria-label="API status indicator"></span></div>
+      <div class="panel-heading"><div><p class="eyebrow">Live check</p><h2 id="checker-title">Inspect a message</h2></div><span class="api-status" id="api-status" role="status">Checking API…</span></div>
       <form id="checker-form">
         <label for="message">Message text</label>
         <textarea id="message" name="message" maxlength="5000" placeholder="Paste an SMS message here..." required></textarea>
@@ -26,6 +26,6 @@
     </section>
     <footer>Predictions are estimates, not guarantees. Never use this tool as the sole basis for a safety-critical decision.</footer>
   </main>
-  <script src="config.js"></script><script src="script.js"></script>
+  <script src="/config.js"></script><script src="/script.js"></script>
 </body>
 </html>

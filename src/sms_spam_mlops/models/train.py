@@ -8,9 +8,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
+import numpy
+import pandas
 import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import f1_score, make_scorer
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
 
@@ -34,7 +37,7 @@ def train_model(dataset_path: Path, artifact_dir: Path, report_dir: Path) -> dic
     search = GridSearchCV(
         pipeline,
         {"tfidf__ngram_range": [(1, 1), (1, 2)], "tfidf__min_df": [1, 2], "classifier__C": [0.5, 1.0, 2.0]},
-        scoring="f1_macro",
+        scoring=make_scorer(f1_score, pos_label="spam"),
         cv=3,
         n_jobs=-1,
     )
@@ -52,6 +55,8 @@ def train_model(dataset_path: Path, artifact_dir: Path, report_dir: Path) -> dic
         "accepted": candidate_is_accepted(metrics, settings.min_accepted_f1),
         "training_seconds": round(time.perf_counter() - started, 3),
         "python_version": platform.python_version(),
+        "numpy_version": numpy.__version__,
+        "pandas_version": pandas.__version__,
         "scikit_learn_version": sklearn.__version__,
     }
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -61,7 +66,7 @@ def train_model(dataset_path: Path, artifact_dir: Path, report_dir: Path) -> dic
     artifact_dir.mkdir(parents=True, exist_ok=True)
     temporary_model = artifact_dir / f"{settings.model_filename}.tmp"
     joblib.dump(search.best_estimator_, temporary_model)
-    temporary_model.replace(settings.resolved_model_path())
+    temporary_model.replace(artifact_dir / settings.model_filename)
     (artifact_dir / "model_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     return metadata
 
