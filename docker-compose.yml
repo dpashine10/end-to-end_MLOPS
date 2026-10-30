@@ -1,6 +1,8 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      network: host
     environment:
       SMS_CORS_ORIGINS: ${SMS_CORS_ORIGINS:-http://localhost:8080}
       SMS_MIN_ACCEPTED_F1: ${SMS_MIN_ACCEPTED_F1:-0.80}
