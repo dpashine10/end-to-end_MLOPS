@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: sms-spam-api}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: sms-spam-api}}
+  template:
+    metadata: {labels: {app: sms-spam-api}}
+    spec:
+      containers:
+        - name: api
+          image: YOUR_REGISTRY/sms-spam-mlops:latest
+          ports: [{containerPort: 8000}]
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: 500m, memory: 512Mi}}
+          readinessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 5}
+          livenessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 15}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: sms-spam-api}
+spec:
+  selector: {app: sms-spam-api}
+  ports: [{port: 8000, targetPort: 8000}]
