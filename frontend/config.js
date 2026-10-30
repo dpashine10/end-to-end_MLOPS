@@ -1,0 +1,1 @@
+window.SMS_SPAM_CONFIG = { apiBaseUrl: "http://localhost:8000" };
