@@ -9,7 +9,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: YOUR_REGISTRY/sms-spam-mlops:latest
+          image: end-to-end_mlops-api-1:latest
           ports: [{containerPort: 8000}]
           resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: 500m, memory: 512Mi}}
           readinessProbe: {httpGet: {path: /ready, port: 8000}, initialDelaySeconds: 5}
