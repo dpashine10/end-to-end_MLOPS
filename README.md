@@ -53,7 +53,7 @@ Run the API and the web page from the repository root:
 uv run uvicorn sms_spam_mlops.api.app:app --app-dir src --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000/` to use the web page. The same server provides the API at `/predict`, `/health`, and `/metrics`, plus OpenAPI at `/docs`. The `/api` route returns a small API status document. A trained model is required for predictions; without it, the page and API health route remain viewable but inference responds that the model is unavailable.
+Open `http://127.0.0.1:8000/` to use the web page. The same server provides the API at `/predict`, `/health`, `/ready`, and `/metrics`, plus OpenAPI at `/docs`. The `/api` route returns a small API status document. `/health` is the process liveness check; `/ready` returns 503 until a model is available. Without a trained model the page remains viewable, but inference responds that the model is unavailable.
 
 The default `frontend/config.js` uses a same-origin API, which works with the API server above and in the Docker deployment. When hosting the static files separately (for example on Cloudflare Pages), edit `frontend/config.js` so `apiBaseUrl` is the full public API origin such as `https://api.example.com`; this is a public URL, not a secret. Do not open the HTML with a `file://` URL when testing API calls.
 
@@ -89,13 +89,15 @@ cd sms-spam-mlops
 cp .env.example .env
 ```
 
-Install `uv` on the VM, then edit `.env`: set a strong `GRAFANA_ADMIN_PASSWORD`, set `SMS_CORS_ORIGINS` to the final frontend origin, and acquire/train the model from the repository root before building:
+Install `uv` on the VM, then edit `.env`: set a strong `GRAFANA_ADMIN_PASSWORD`, set `SMS_CORS_ORIGINS` to the final frontend origin, and acquire/train the model from the repository root before building. Model artifacts are gitignored and are not included by cloning the repository; training on the VM creates the files that the image needs:
 
 ```bash
 uv sync --extra dev
 uv run download-data
 uv run train-model
-docker compose up --build -d
+ls -lh artifacts/sms_spam_pipeline.joblib artifacts/model_metadata.json
+docker compose build
+docker compose up -d
 docker compose ps
 ```
 
@@ -128,6 +130,7 @@ Settings use the `SMS_` environment prefix. Important values are `SMS_DATA_DIR`,
 ## Troubleshooting and limitations
 
 - A degraded health response means the accepted model artifact is missing or invalid; run data acquisition and training, then restart the API.
+- If Compose says the API is unhealthy, inspect it from the server with `docker compose logs --tail=100 api` and query `curl -i http://127.0.0.1:8000/ready`. The Docker health check tests that the API process responds; `/ready` reports whether its model loaded. Since model artifacts are excluded from Git, create them with the documented download and training commands on the server (then rebuild the API image) or provide them through a controlled artifact transfer.
 - A download failure is surfaced as an error; no fabricated fallback data is created.
 - Predictions are statistical estimates and may be wrong for new languages, adversarial text, or changing spam campaigns.
 - The project has no online drift detection or automatic deployment. A future extension could add a review queue, signed model artifacts, richer data versioning, and scheduled drift reports.

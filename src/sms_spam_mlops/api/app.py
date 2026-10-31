@@ -88,7 +88,11 @@ def create_app(
     async def record_http_metrics(request: Request, call_next: Any) -> Any:
         started = time.perf_counter()
         response = await call_next(request)
-        endpoint = request.url.path if request.url.path in {"/", "/health", "/predict", "/metrics"} else "other"
+        endpoint = (
+            request.url.path
+            if request.url.path in {"/", "/health", "/ready", "/predict", "/metrics"}
+            else "other"
+        )
         requests.labels(endpoint=endpoint, status=str(response.status_code)).inc()
         latency.labels(endpoint=endpoint).observe(time.perf_counter() - started)
         return response
@@ -103,11 +107,19 @@ def create_app(
 
     @app.get("/health")
     def health() -> dict[str, object]:
+        """Report process health and whether an accepted model is available."""
         return {
             "status": "ok" if service.loaded else "degraded",
             "model_loaded": service.loaded,
             "model_version": service.model_version,
         }
+
+    @app.get("/ready")
+    def readiness() -> dict[str, object]:
+        """Report inference readiness; return 503 until the model is loaded."""
+        if not service.loaded:
+            raise HTTPException(status_code=503, detail="The model is unavailable")
+        return {"ready": True, "model_version": service.model_version}
 
     @app.post("/predict")
     def predict(payload: PredictionRequest) -> dict[str, object]:

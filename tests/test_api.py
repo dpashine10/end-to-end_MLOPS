@@ -10,6 +10,7 @@ def test_health_predict_and_metrics(test_settings) -> None:
     assert "SMS Spam Detector" in page.text
     assert client.get("/script.js").status_code == 200
     assert client.get("/health").json()["model_loaded"] is True
+    assert client.get("/ready").status_code == 200
     response = client.post("/predict", json={"text": "free prize claim now"})
     assert response.status_code == 200
     assert response.json()["predicted_class"] in {"spam", "not_spam"}
@@ -28,4 +29,5 @@ def test_missing_model_returns_degraded_health(tmp_path) -> None:
 
     client = TestClient(create_app(Settings(model_path=tmp_path / "none.joblib")))
     assert client.get("/health").json()["status"] == "degraded"
+    assert client.get("/ready").status_code == 503
     assert client.post("/predict", json={"text": "hello"}).status_code == 503
